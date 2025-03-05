@@ -1,147 +1,100 @@
 # -*- coding: utf-8 -*-
-from __future__ import unicode_literals
-from __future__ import print_function
-from __future__ import division
-
 import binascii
 import struct
-import biplist
-import mac_alias
 import re
-import StringIO
+import io
+from io import BytesIO
 import hashlib
 
-try:
-    next
-except NameError:
-    next = lambda x: x.next()
-
 from . import buddy
+
 
 class IlocCodec(object):
     @staticmethod
     def decode(bytesData):
-        if isinstance(bytesData, bytearray):
-            x, y, z, a = struct.unpack_from(b'>IIII', bytes(bytesData[:16]))
-        else:
-            x, y, z, a = struct.unpack(b'>IIII', bytesData[:16])
-            
-        h_str = str(bytesData).encode('hex')
-        
-        r_value_hor = x
-        r_value_ver = y
-        r_value_idx = z
-        if r_value_hor == 4294967295L:
-            r_value_hor = u"Null"
-        if r_value_ver == 4294967295L:
-            r_value_ver = u"Null"
-        if r_value_idx == 4294967295L:
-            r_value_idx = u"Null"
+        x, y, z, a = struct.unpack_from(b'>IIII', bytesData[:16])
+        h_str = binascii.hexlify(bytesData).decode()
 
-        val = "Location: ({0}, {1}), Selected Index: {2}, Unknown: {3}".format(
-            unicode(r_value_hor), 
-            unicode(r_value_ver), 
-            unicode(r_value_idx),
-            h_str[24:32]
-        )
+        r_value_hor = x if x != 4294967295 else "Null"
+        r_value_ver = y if y != 4294967295 else "Null"
+        r_value_idx = z if z != 4294967295 else "Null"
 
-        return val
+        return f"Location: ({r_value_hor}, {r_value_ver}), Selected Index: {r_value_idx}, Unknown: {h_str[24:32]}"
+
 
 class IcvoCodec(object):
     @staticmethod
     def decode(bytesData):
-        h_str = str(bytesData).encode('hex')
-        i_type = h_str[:8].decode('hex')
+        h_str = binascii.hexlify(bytesData).decode()
+        i_type = bytes.fromhex(h_str[:8]).decode(errors="ignore")
         p_size = str(int(h_str[8:12], 16))
-        g_align = h_str[12:20].decode('hex')
-        g_align_loc = h_str[20:28].decode('hex')
+        g_align = bytes.fromhex(h_str[12:20]).decode(errors="ignore")
+        g_align_loc = bytes.fromhex(h_str[20:28]).decode(errors="ignore")
         unknown = str(h_str[28:])
-        
-        val = "Type: {0}, IconPixelSize: {1}, GridAlign: {2}, GridAlignTo: {3}, Unknown: {4}".format(
-            i_type,
-            p_size,
-            g_align,
-            g_align_loc,
-            unknown
-        )
-        
-        return val
-        
+
+        return f"Type: {i_type}, IconPixelSize: {p_size}, GridAlign: {g_align}, GridAlignTo: {g_align_loc}, Unknown: {unknown}"
+
+
 class Fwi0Codec(object):
     @staticmethod
     def decode(bytesData):
-        if isinstance(bytesData, bytearray):
-            w, x, y, z = struct.unpack_from(b'>HHHH', bytes(bytesData[:16]))
-        else:
-            w, x, y, z = struct.unpack(b'>HHHH', bytesData[:16])
-            
-        h_str = str(bytesData).encode('hex')
-        
+        w, x, y, z = struct.unpack_from(b'>HHHH', bytesData[:16])
+        h_str = binascii.hexlify(bytesData).decode()
+
         h_array = (
-            'top: ' + str(w),
-            'left: ' + str(x),
-            'bottom: ' + str(y),
-            'right: ' + str(z),
-            'view_type: ' + h_str[16:24].decode('hex'),
-            'Unknown: ' + h_str[24:32]
+            f'top: {w}',
+            f'left: {x}',
+            f'bottom: {y}',
+            f'right: {z}',
+            f'view_type: {bytes.fromhex(h_str[16:24]).decode(errors="ignore")}',
+            f'Unknown: {h_str[24:32]}'
         )
-        
-        val = str(h_array).replace("', u'",", ").replace("'","").replace("(u","(")
-        
-        return val
-        
+
+        return ", ".join(h_array)
+
+
 class DilcCodec(object):
     @staticmethod
     def decode(bytesData):
-        if isinstance(bytesData, bytearray):
-            u, v, w, x, y, z, a, b = struct.unpack_from(b'>IIIIIIII', bytes(bytesData[:32]))
-        else:
-            u, v, w, x, y, z, a, b = struct.unpack(b'>IIIIIIII', bytesData[:32])
-        h_str = str(bytesData).encode('hex')
-        if int(h_str[16:24], 16) > 65535:
-            h_pos = "IconPosFromRight: " + str(4294967295 - int(h_str[16:24], 16))
-        else:
-            h_pos = "IconPosFromLeft: " + str(int(h_str[16:24], 16))
-            
-        if int(h_str[24:32], 16) > 65535:
-            v_pos = "IconPosFromBottom: " + str(4294967295 - int(h_str[24:32], 16))
-        else:
-            v_pos = "IconPosFromTop: " + str(int(h_str[24:32], 16))
+        u, v, w, x, y, z, a, b = struct.unpack_from(b'>IIIIIIII', bytesData[:32])
+        h_str = binascii.hexlify(bytesData).decode()
+
+        h_pos = f"IconPosFromRight: {4294967295 - int(h_str[16:24], 16)}" if int(h_str[16:24], 16) > 65535 else f"IconPosFromLeft: {int(h_str[16:24], 16)}"
+        v_pos = f"IconPosFromBottom: {4294967295 - int(h_str[24:32], 16)}" if int(h_str[24:32], 16) > 65535 else f"IconPosFromTop: {int(h_str[24:32], 16)}"
+
         h_array = (
-            "Unk1: "+h_str[:8],
-            "GridQuadrant: "+str(int(h_str[8:12],16)),        # short?: Indicates the quadrant on the screen the icon is located. 1=top right, 2=bottom right, 3=bottom left, 4=top left
-            "Unk2: "+h_str[12:16],       # short?: Unknown. Values other than 0 have been observed
-            h_pos,       # position from right/left of screen. 0xFF indicates right position
-            v_pos,       # position from top/bottom of screen. 0xFF indicates bottom position
-            "GridIconPosFromLeft: "+str(int(h_str[32:40], 16)),       # position from left
-            "GridIconPosFromTop: "+str(int(h_str[40:48], 16)),       # position from top
-            "Unk3: "+h_str[48:56],
-            "Unk4: "+h_str[56:64]
+            f"Unk1: {h_str[:8]}",
+            f"GridQuadrant: {int(h_str[8:12], 16)}",
+            f"Unk2: {h_str[12:16]}",
+            h_pos,
+            v_pos,
+            f"GridIconPosFromLeft: {int(h_str[32:40], 16)}",
+            f"GridIconPosFromTop: {int(h_str[40:48], 16)}",
+            f"Unk3: {h_str[48:56]}",
+            f"Unk4: {h_str[56:64]}"
         )
-        
-        val = str(h_array).replace("', u'",", ").replace("'","").replace("(u","(")
-        
-        return val
+
+        return ", ".join(h_array)
+
 
 class PlistCodec(object):
     @staticmethod
-    def decode(bytes):
+    def decode(bytesData):
         try:
-            return biplist.readPlistFromString(bytes)
+            return biplist.readPlistFromBytes(bytesData)
         except Exception as exp:
-            return str(exp) + ': ' + str(bytes).encode('hex')
+            return f"{exp}: {binascii.hexlify(bytesData).decode()}"
+
 
 class BookmarkCodec(object):
     @staticmethod
-    def decode(bytes):
+    def decode(bytesData):
         try:
-            return mac_alias.Bookmark.from_bytes(bytes)
+            return mac_alias.Bookmark.from_bytes(bytesData)
         except Exception as exp:
-            return str(exp) + ': ' + str(bytes).encode('hex')
+            return f"{exp}: {binascii.hexlify(bytesData).decode()}"
 
-# This list tells the code how to decode particular kinds of entry in the
-# .DS_Store file.  This is really a convenience, and we currently only
-# support a tiny subset of the possible entry types.
+
 codecs = {
     b'Iloc': IlocCodec,
     b'icvo': IcvoCodec,
@@ -155,8 +108,8 @@ codecs = {
     b'lsvC': PlistCodec,
     b'pBBk': BookmarkCodec,
     b'pBB0': BookmarkCodec
-    }
-    
+}
+
 codes = {
     "BKGD": u"Finder Folder Background Picture",
     "ICVO": u"Icon View Options",
@@ -215,313 +168,185 @@ types = (
     
 
 class DSStoreEntry(object):
-    """Holds the data from an entry in a ``.DS_Store`` file.  Note that this is
-    not meant to represent the entry itself---i.e. if you change the type
-    or value, your changes will *not* be reflected in the underlying file.
-
-    If you want to make a change, you should either use the :class:`DSStore`
-    object's :meth:`DSStore.insert` method (which will replace a key if it
-    already exists), or the mapping access mode for :class:`DSStore` (often
-    simpler anyway).
-    """
     def __init__(self, filename, code, typecode, value=None, node=None):
-        if str != bytes and type(filename) == bytes:
-            filename = filename.decode('utf-8')
-
-        if not isinstance(code, bytes):
-            code = code.encode('latin_1')
-
+        if isinstance(filename, bytes):
+            filename = filename.decode('utf-8', errors="ignore")
         self.filename = filename
-        self.code = code
+        self.code = code.decode() if isinstance(code, bytes) else code
         self.type = typecode
         self.value = value
         self.node = node
-        
+
     def __repr__(self):
         return repr((self.filename, self.code, self.type, self.value, self.node))
-        
+
     @classmethod
     def read(cls, block, node):
-        """Read a ``.DS_Store`` entry from the containing Block"""
-        # First read the filename
-        nlen = block.read(b'>I')[0]
-        filename = block.read(2 * nlen).decode('utf-16be')
+        nlen = struct.unpack('>I', block.read(4))[0]
+        filename = block.read(2 * nlen).decode('utf-16be', errors="ignore")
 
-        # Next, read the code and type
-        code, typecode = block.read(b'>4s4s')
+        code, typecode = struct.unpack('>4s4s', block.read(8))
 
-        # Finally, read the data
         if typecode == b'bool':
-            value = block.read(b'>?')[0]
-        elif typecode == b'long' or typecode == b'shor':
-            value = block.read(b'>I')[0]
+            value = struct.unpack('>?', block.read(1))[0]
+        elif typecode in [b'long', b'shor']:
+            value = struct.unpack('>I', block.read(4))[0]
         elif typecode == b'blob':
-            vlen = block.read(b'>I')[0]
+            vlen = struct.unpack('>I', block.read(4))[0]
             value = block.read(vlen)
-
-            codec = codecs.get(code, None)
-            if codec:
-                value = codec.decode(value)
-                typecode = codec
+            if code in codecs:
+                value = codecs[code].decode(value)
+                typecode = codecs[code]
         elif typecode == b'ustr':
-            vlen = block.read(b'>I')[0]
-            value = block.read(2 * vlen).decode('utf-16be')
+            vlen = struct.unpack('>I', block.read(4))[0]
+            value = block.read(2 * vlen).decode('utf-16be', errors="ignore")
         elif typecode == b'type':
-            value = block.read(b'>4s')[0]
-        elif typecode == b'comp' or typecode == b'dutc':
-            value = block.read(b'>Q')[0]
+            value = struct.unpack('>4s', block.read(4))[0].decode(errors="ignore")
+        elif typecode in [b'comp', b'dutc']:
+            value = struct.unpack('>Q', block.read(8))[0]
         else:
-            raise ValueError('Unknown type code "%s"' % typecode)
+            raise ValueError(f'Unknown type code "{typecode}"')
 
         return DSStoreEntry(filename, code, typecode, value, node)
 
     def __lt__(self, other):
-        if not isinstance(other, DSStoreEntry):
-            raise TypeError('Can only compare against other DSStoreEntry objects')
-        sfl = self.filename.lower()
-        ofl = other.filename.lower()
-        return (sfl < ofl
-                or (self.filename == other.filename
-                    and self.code < other.code))
+        return (self.filename.lower(), self.code) < (other.filename.lower(), other.code)
 
     def __le__(self, other):
-        if not isinstance(other, DSStoreEntry):
-            raise TypeError('Can only compare against other DSStoreEntry objects')
-        sfl = self.filename.lower()
-        ofl = other.filename.lower()
-        return (sfl < ofl
-                or (sfl == ofl
-                    and self.code <= other.code))
+        return (self.filename.lower(), self.code) <= (other.filename.lower(), other.code)
 
-
-class DSStore(object):
-    """Python interface to a ``.DS_Store`` file.  Works by manipulating the file
-    on the disk---so this code will work with ``.DS_Store`` files for *very*
-    large directories.
-
-    A :class:`DSStore` object can be used as if it was a mapping, e.g.::
-
-      d['foobar.dat']['Iloc']
-
-    will fetch the "Iloc" record for "foobar.dat", or raise :class:`KeyError` if
-    there is no such record.  If used in this manner, the :class:`DSStore` object
-    will return (type, value) tuples, unless the type is "blob" and the module
-    knows how to decode it.
-
-    Currently, we know how to decode "Iloc", "bwsp", "lsvp", "lsvP" and "icvp"
-    blobs.  "Iloc" decodes to an (x, y) tuple, while the others are all decoded
-    using ``biplist``.
-
-    Assignment also works, e.g.::
-
-      d['foobar.dat']['note'] = ('ustr', u'Hello World!')
-
-    as does deletion with ``del``::
-
-      del d['foobar.dat']['note']
-
-    This is usually going to be the most convenient interface, though
-    occasionally (for instance when creating a new ``.DS_Store`` file) you
-    may wish to drop down to using :class:`DSStoreEntry` objects directly."""
+class DSStore:
+    """Python 3 interface to a ``.DS_Store`` file."""
+    
     def __init__(self, store):
         self._store = store
-        
         self.entries = {}
         self.dict_list = {}
-
         self._superblk = self._store['DSDB']
+        
         with self._get_block(self._superblk) as s:
             self._rootnode, self._levels, self._records, \
-            self._nodes, self._page_size = s.read(b'>IIIII')
-            
+                self._nodes, self._page_size = s.read('>IIIII')
+        
         self._min_usage = 2 * self._page_size // 3
         self._dirty = False
-        
+        self.src_name = self._store._file.name
+    
     @classmethod
     def open(cls, file_or_name, mode='r+', initial_entries=None):
-        """Open a ``.DS_Store`` file; pass either a Python file object, or a
-        filename in the ``file_or_name`` argument and a file access mode in
-        the ``mode`` argument.  If you are creating a new file using the "w"
-        or "w+" modes, you may also specify a list of entries with which
-        to initialise the file."""
         store = buddy.Allocator.open(file_or_name, mode)
         return DSStore(store)
-
+    
     def _get_block(self, number):
         return self._store.get_block(number)
-
-    # Iterate over the tree, starting at `node'
+    
     def _traverse(self, node):
-        counter = 0
-        self.src_name = self._store._file.name
-        
         if node is None:
             node = self._rootnode
+        
         with self._get_block(node) as block:
-            next_node, count = block.read(b'>II')
+            next_node, count = block.read('>II')
             
             if next_node:
-                for n in range(count):
-                    counter = counter + 1
-                    ptr = block.read(b'>I')[0]
-                    
-                    for t in self._traverse(ptr):
-                        yield t
+                for _ in range(count):
+                    ptr = block.read('>I')[0]
+                    yield from self._traverse(ptr)
                     
                     e = DSStoreEntry.read(block, node)
-                    chk = e.filename.encode('ascii', 'replace') + str(e.type) + str(e.code) + self.src_name.encode('ascii', 'replace') + str(e.value).encode('hex')
-                    e_hash = hashlib.md5(chk).hexdigest()
+                    e_hash = self._generate_hash(e)
                     
-                    if not self.dict_list.has_key(e_hash):
+                    if e_hash not in self.dict_list:
                         self.entries[e_hash] = e
-                        self.entries[e_hash].node = 'allocated ' + str(node)
-                        self.dict_list[e_hash] = chk + 'allocated ' + str(node)
-                        
-                    elif self.dict_list.has_key(e_hash) and 'unallocated' in self.dict_list[e_hash]:
+                        self.entries[e_hash].node = f'allocated {node}'
+                        self.dict_list[e_hash] = f'{e_hash} allocated {node}'
+                    elif 'unallocated' in self.dict_list[e_hash]:
                         self.entries[e_hash] = e
-                        self.entries[e_hash].node = self.dict_list[e_hash].split('unallocated')[1] + 'hello, reallocated in {}'.format(node)
-                        self.dict_list[e_hash] = self.dict_list[e_hash] + ', reallocated in {}'.format(node)
-                    else:
-                        sys.exit()
-
-                if counter == count and block.tell() < len(block):
-                    slack = unicode(block)[block.tell() * 2:]
-                    self.read_slack(slack, node)
-                    
-                for t in self._traverse(next_node):
-                    yield t
-                    
-                if self.entries:
-                    for key in self.entries:
-                        yield self.entries[key]
-                        
-                counter = 0
-                self.entries = {}
+                        self.entries[e_hash].node = f"{self.dict_list[e_hash].split('unallocated')[1]} reallocated in {node}"
+                        self.dict_list[e_hash] += f', reallocated in {node}'
                 
+                yield from self._traverse(next_node)
+                yield from self.entries.values()
+                self.entries.clear()
             else:
-                for n in range(count):
-                    counter = counter + 1
+                for _ in range(count):
                     e = DSStoreEntry.read(block, node)
-                    chk = e.filename.encode('ascii', 'replace') + str(e.type) + str(e.code) + self.src_name.encode('ascii', 'replace') + str(e.value).encode('hex')
-                    e_hash = hashlib.md5(chk).hexdigest()
+                    e_hash = self._generate_hash(e)
                     
-                    if not self.dict_list.has_key(e_hash):
+                    if e_hash not in self.dict_list:
                         self.entries[e_hash] = e
-                        self.entries[e_hash].node = 'allocated ' + str(node)
-                        self.dict_list[e_hash] = chk + 'allocated ' + str(node)
-                        
-                    elif self.dict_list.has_key(e_hash) and 'unallocated' in self.dict_list[e_hash]:
+                        self.entries[e_hash].node = f'allocated {node}'
+                        self.dict_list[e_hash] = f'{e_hash} allocated {node}'
+                    elif 'unallocated' in self.dict_list[e_hash]:
                         self.entries[e_hash] = e
-                        self.entries[e_hash].node = self.dict_list[e_hash].split('unallocated')[1] + 'unallocated, reallocated in {}'.format(node)
-                        self.dict_list[e_hash] = self.dict_list[e_hash] + ', reallocated in {}'.format(node)
-                    else:
-                        sys.exit()
-                '''      
-                if counter == count and block.tell() < len(block):
-                    slack = unicode(block)[block.tell() * 2:]
-                    self.read_slack(slack, node)
-                '''
-                if self.entries:
-                    for key in self.entries:
-                        yield self.entries[key]
-                        
-                counter = 0
-                self.entries = {}
-
+                        self.entries[e_hash].node = f"{self.dict_list[e_hash].split('unallocated')[1]} reallocated in {node}"
+                        self.dict_list[e_hash] += f', reallocated in {node}'
+                
+                yield from self.entries.values()
+                self.entries.clear()
+    
     def __iter__(self):
         return self._traverse(self._rootnode)
-        
+    
+    def _generate_hash(self, entry):
+        hash_input = f"{entry.filename}{entry.type}{entry.code}{self.src_name}{entry.value}".encode('utf-8')
+        return hashlib.md5(hash_input).hexdigest()
+    
     def read_slack(self, slack, node):
-        slack = slack.decode('hex')
-        
-        search_exp = '('
-        
-        for k in codes.keys():
-            for t in types:
-                search_exp = search_exp + k + t + '|'
-                
-        search_exp = search_exp[:-1] + ')'
-        
-        p = re.compile('\x00\x00\x00[\x01-\xff](\x00[\x01-\xff]){1,}%s' % (search_exp))
-        
+        slack = bytes.fromhex(slack)
+        search_exp = '(' + '|'.join(k + t for k in codes.keys() for t in types) + ')'
+        p = re.compile(rb'\x00\x00\x00[\x01-\xff](\x00[\x01-\xff]){1,}' + search_exp.encode())
         s_offset = p.search(slack)
-        
         if s_offset:
             s_offset = s_offset.span()[0]
-            
-        sub_search = re.finditer('\x00\x00\x00[\x01-\xff](\x00[\x01-\xff]){1,}%s' % (search_exp), slack)
-        counter = 0
         
-        for match in sub_search:
-            counter = counter + 1
-            if match.regs[0][0] == s_offset:
+        for match in re.finditer(rb'\x00\x00\x00[\x01-\xff](\x00[\x01-\xff]){1,}' + search_exp.encode(), slack):
+            if match.start() == s_offset:
                 prev = s_offset
                 s_offset = None
             else:
-                e_off = match.regs[0][0]
+                e_off = match.start()
                 s_off = prev
                 prev = e_off
-                hex_str = str(slack[s_off:].encode('hex'))
-                block = StringIO.StringIO()
-                block.write(hex_str.decode('hex'))
                 
-
-                block.seek(0)
+                hex_str = slack[s_off:].hex()
+                block = BytesIO(bytes.fromhex(hex_str))
+                
                 try:
                     nlen = struct.unpack('>I', block.read(4))[0]
-                    
                     filename = block.read(2 * nlen).decode('utf-16be')
-                    
-                    # Next, read the code and type
                     code, typecode = struct.unpack('>4s4s', block.read(8))
-
-                    # Finally, read the data
-                    if typecode == 'bool':
+                    
+                    if typecode == b'bool':
                         value = struct.unpack('>?', block.read(4))[0]
-                        
-                    elif typecode == 'long' or typecode == 'shor':
+                    elif typecode in [b'long', b'shor']:
                         value = struct.unpack('>I', block.read(4))[0]
-                        
-                    elif typecode == 'blob':
+                    elif typecode == b'blob':
                         vlen = struct.unpack('>I', block.read(4))[0]
                         value = block.read(vlen)
                         codec = codecs.get(code, None)
-                        
                         if codec:
                             value = codec.decode(value)
                             typecode = codec
-                            
                     elif typecode == b'ustr':
                         vlen = struct.unpack('>I', block.read(4))[0]
                         value = block.read(2 * vlen).decode('utf-16be')
-                        
                     elif typecode == b'type':
                         value = struct.unpack('>4s', block.read(4))[0]
-                        
-                    elif typecode == b'comp' or typecode == b'dutc':
+                    elif typecode in [b'comp', b'dutc']:
                         value = struct.unpack('>Q', block.read(8))[0]
-                        
                     else:
-                        raise ValueError('Unknown type code "%s"' % typecode)
+                        raise ValueError(f'Unknown type code "{typecode}"')
                 except Exception as e:
-                    print('File: %s. unable to parse entry. Error: %s' % (self.src_name, str(e)))
+                    print(f'File: {self.src_name}. unable to parse entry. Error: {str(e)}')
                     continue
-
-                    
-                e = DSStoreEntry(filename, code, typecode, value, 'unallocated')
-                chk = e.filename.encode('ascii', 'replace') + str(e.type) + str(e.code) + self.src_name.encode('ascii', 'replace') + str(e.value).encode('hex')
-                e_hash = hashlib.md5(chk).hexdigest()
                 
-                if not self.dict_list.has_key(e_hash):
+                e = DSStoreEntry(filename, code, typecode, value, 'unallocated')
+                e_hash = self._generate_hash(e)
+                
+                if e_hash not in self.dict_list:
                     self.entries[e_hash] = e
-                    self.dict_list[e_hash] = chk + 'unallocated'
-                    
-                elif self.dict_list.has_key(e_hash) and 'unallocated' not in self.dict_list[e_hash]:
+                    self.dict_list[e_hash] = f'{e_hash} unallocated'
+                elif 'unallocated' not in self.dict_list[e_hash]:
                     self.entries[e_hash] = e
-                    self.entries[e_hash].node = str(self.entries[e_hash].node) + ', reallocated in {}'.format(node)
-                    self.dict_list[e_hash] = chk + ' reallocated'
-                    
-                else:
-                    print('File: %s. unknown exception in store.py' % (self.src_name))
-                    pass
-
+                    self.entries[e_hash].node += f', reallocated in {node}'
+                    self.dict_list[e_hash] = f'{e_hash} reallocated'
