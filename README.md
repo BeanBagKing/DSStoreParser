@@ -10,6 +10,10 @@ python3 -m venv dsstore && . dsstore/bin/activate
 python3 ./DSStoreParser.py -h
 ```
 
+Additional ports to Python 3 come from:
+https://github.com/ActualTrash/DSStoreParser
+https://github.com/digitalsleuth/DSStoreParser
+
 # DSStoreParser
 macOS .DS_Store Parser. Searches recursively for .DS_Store files in the path provided and parses them.
 MacOS Finder uses .DS_Store files to remember how a folder view was customized by the user.
