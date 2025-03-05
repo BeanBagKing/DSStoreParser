@@ -1,3 +1,15 @@
+# Updated for Python 3
+Mostly via AI. Output looks right, but verify with other tools.
+
+Useage is the same as beofre, license and the rest of the readme below has not been modified. Credit for the original to https://github.com/nicoleibrahim
+
+```
+git clone https://github.com/BeanBagKing/DSStoreParser
+cd DSStoreParser
+python3 -m venv dsstore && . dsstore/bin/activate
+python3 ./DSStoreParser.py -h
+```
+
 # DSStoreParser
 macOS .DS_Store Parser. Searches recursively for .DS_Store files in the path provided and parses them.
 MacOS Finder uses .DS_Store files to remember how a folder view was customized by the user.
